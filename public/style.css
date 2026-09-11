@@ -319,10 +319,14 @@ textarea { resize: vertical; min-height: 70px; }
 
 /* ---------------------------------------------------------------- products */
 
+/* A food menu should read as a counter you scan, not a list you scroll. 210px is
+   the narrowest a card can be while the name, price and button still sit
+   comfortably -- it yields four across the 1080px page and folds to three, then
+   two, on its own. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
 }
 
 .product {
@@ -608,7 +612,26 @@ dialog .inner { padding: 24px; }
   .btn.sm { padding: 9px 13px; font-size: 13.5px; }
   .cart-item .qty button { width: 34px; height: 34px; font-size: 16px; }
 
-  .grid { gap: 16px; }
+  /* Two across even on a 360px screen. The card tightens to suit the width
+     rather than the row dropping to one. */
+  .grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+
+  .product .body { padding: 11px 11px 12px; }
+  .product h3 { font-size: 14.5px; line-height: 1.3; }
+  .product p.desc {
+    margin: 5px 0 10px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;         /* keeps every card the same height */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .price-row { gap: 6px; margin-bottom: 10px; }
+  .product .price { font-size: 16.5px; }
+  .product .was { font-size: 12.5px; }
+  .product .btn { width: 100%; padding: 9px 10px; font-size: 13px; }
+  .shot .tag.off { top: 7px; left: 7px; padding: 2px 7px; font-size: 10.5px; }
 
   .cart { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
 
@@ -683,7 +706,9 @@ dialog .inner { padding: 24px; }
 }
 
 @media (max-width: 420px) {
-  .grid { grid-template-columns: 1fr; }
+  /* Pinned to two rather than left to auto-fill, so the narrowest phones still
+     show a pair side by side instead of falling back to one. */
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .page-head h1 { font-size: 21px; }
-  main { padding: 18px 13px 54px; }
+  main { padding: 18px 12px 54px; }
 }
