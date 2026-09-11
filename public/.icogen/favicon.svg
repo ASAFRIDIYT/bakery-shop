@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Tab icons are read at 16px. Anything finer than this turns to mud, so the
+       mark is one bold croissant curve on a solid ground. -->
+  <rect width="32" height="32" rx="8" fill="#b4562a"/>
+  <path d="M6.5 23.5C6.5 10.5 25.5 10.5 25.5 23.5"
+        fill="none" stroke="#fdf8f3" stroke-width="5.4" stroke-linecap="round"/>
+  <path d="M16 12.4v4.2" stroke="#b4562a" stroke-width="1.7" stroke-linecap="round"/>
+</svg>
