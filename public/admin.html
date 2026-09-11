@@ -219,13 +219,13 @@ async function loadProducts () {
       <td>${p.image_url
             ? `<img class="thumb" src="${esc(p.image_url)}" alt="">`
             : `<div class="thumb"></div>`}</td>
-      <td>${esc(p.name)}</td>
-      <td class="num"><input data-f="price" type="number" min="0" step="1"
+      <td data-label="Name"><b>${esc(p.name)}</b></td>
+      <td class="num" data-label="Price"><input data-f="price" type="number" min="0" step="1"
             value="${p.price}" style="width:92px;text-align:right"></td>
-      <td class="num"><input data-f="discount_percent" type="number" min="0" max="90"
+      <td class="num" data-label="Disc %"><input data-f="discount_percent" type="number" min="0" max="90"
             value="${p.discount_percent}" style="width:72px;text-align:right"></td>
-      <td class="num"><b>${money(finalPrice(p))}</b></td>
-      <td><input data-f="is_available" type="checkbox" ${p.is_available ? 'checked' : ''}></td>
+      <td class="num" data-label="Sells for"><b>${money(finalPrice(p))}</b></td>
+      <td data-label="Shown"><input data-f="is_available" type="checkbox" ${p.is_available ? 'checked' : ''}></td>
       <td class="right" style="white-space:nowrap">
         <button class="btn ghost sm" data-pic="${p.id}">Picture</button>
         <button class="btn sm" data-save="${p.id}">Save</button>
@@ -312,15 +312,15 @@ async function loadOrders () {
 
   table.innerHTML = head + data.map(o => `
     <tr>
-      <td>${new Date(o.created_at).toLocaleString('en-PK',
+      <td data-label="When">${new Date(o.created_at).toLocaleString('en-PK',
             { dateStyle: 'short', timeStyle: 'short' })}</td>
-      <td>${esc(o.customer_name)}<br>
+      <td data-label="Customer"><span><b>${esc(o.customer_name)}</b><br>
           <span class="muted" style="font-size:13px">${esc(o.phone)}</span><br>
-          <span class="muted" style="font-size:13px">${esc(o.address)}</span></td>
-      <td>${o.bakery_order_items.map(i =>
-            `${esc(i.product_name)} ×${i.qty}`).join('<br>')}</td>
-      <td class="num"><b>${money(o.total)}</b></td>
-      <td>
+          <span class="muted" style="font-size:13px">${esc(o.address)}</span></span></td>
+      <td data-label="Items"><span>${o.bakery_order_items.map(i =>
+            `${esc(i.product_name)} ×${i.qty}`).join('<br>')}</span></td>
+      <td class="num" data-label="Total"><b>${money(o.total)}</b></td>
+      <td data-label="Status">
         <select data-status="${o.id}" style="width:auto">
           ${states.map(s =>
             `<option value="${s}"${s === o.status ? ' selected' : ''}>${s}</option>`).join('')}

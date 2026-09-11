@@ -571,10 +571,119 @@ dialog .inner { padding: 24px; }
 .stack > * + * { margin-top: 14px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 
-@media (max-width: 560px) {
-  header.site { padding: 12px 14px; gap: 8px; }
-  nav.site { gap: 2px; }
-  nav.site a { padding: 7px 9px; font-size: 13px; }
-  main { padding: 22px 15px 60px; }
+/* ------------------------------------------------------------------ mobile */
+
+@media (max-width: 680px) {
+
+  /* Header becomes two rows: identity and cart on top, the links below on their
+     own line. Cramming brand + links + theme + cart onto one 360px row leaves
+     every target too small to hit. */
+  header.site { padding: 11px 14px 0; gap: 10px; flex-wrap: wrap; }
+  .brand { margin-right: auto; font-size: 17px; }
+
+  nav.site {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    gap: 2px;
+    padding-bottom: 9px;
+    overflow-x: auto;            /* never pushes the page sideways */
+    scrollbar-width: none;
+  }
+  nav.site::-webkit-scrollbar { display: none; }
+  nav.site a { padding: 8px 10px; font-size: 13.5px; white-space: nowrap; }
+  .theme-btn { margin-left: auto; flex: none; }
+
+  main { padding: 20px 15px 60px; }
+  .page-head { margin-bottom: 20px; }
   .page-head h1 { font-size: 23px; }
+
+  /* 16px is the threshold below which iOS Safari zooms the page in when a field
+     takes focus -- which then leaves the layout scrolled sideways. */
+  input, textarea, select { font-size: 16px; padding: 11px 12px; }
+  td input { font-size: 16px; padding: 9px 10px; }
+
+  /* Comfortable thumb targets. */
+  .btn { padding: 11px 16px; }
+  .btn.sm { padding: 9px 13px; font-size: 13.5px; }
+  .cart-item .qty button { width: 34px; height: 34px; font-size: 16px; }
+
+  .grid { gap: 16px; }
+
+  .cart { padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+
+  dialog .inner { padding: 20px 18px; }
+}
+
+/* Wide tables do not survive a phone screen. Below this width each row becomes
+   its own card, with the column name carried in front of each value. */
+@media (max-width: 680px) {
+
+  #prodTable, #orderTable,
+  #prodTable tbody, #orderTable tbody,
+  #prodTable tr, #orderTable tr,
+  #prodTable td, #orderTable td { display: block; width: 100%; }
+
+  /* The header row has nothing to label once the columns are gone. */
+  #prodTable tr:first-child,
+  #orderTable tr:first-child { display: none; }
+
+  #prodTable tr, #orderTable tr {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 13px;
+    margin: 0 0 12px;
+    background: var(--paper);
+  }
+  #prodTable tr:hover td,
+  #orderTable tr:hover td { background: none; }
+
+  #prodTable td, #orderTable td {
+    border: 0;
+    padding: 5px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+  }
+
+  #prodTable td::before, #orderTable td::before {
+    content: attr(data-label);
+    flex: none;
+    width: 86px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  /* Cells with no label (the thumbnail, the buttons) give the space back. */
+  #prodTable td:not([data-label])::before,
+  #orderTable td:not([data-label])::before { display: none; }
+
+  #prodTable td input[type=number] { width: 100% !important; text-align: left !important; }
+  #prodTable td:last-child, #orderTable td:last-child {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  #prodTable .thumb { width: 54px; height: 54px; }
+  #orderTable select { width: 100% !important; }
+
+  /* The card is the border now; the wrapper should not draw a second one. */
+  .card.table-wrap {
+    border: 0;
+    background: none;
+    box-shadow: none;
+    overflow-x: visible;
+  }
+}
+
+@media (max-width: 420px) {
+  .grid { grid-template-columns: 1fr; }
+  .page-head h1 { font-size: 21px; }
+  main { padding: 18px 13px 54px; }
 }
