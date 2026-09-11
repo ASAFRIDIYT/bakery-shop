@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sweet Crumb Bakery</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site">
+  <a class="brand" href="index.html"><span class="mark">🥐</span> Sweet Crumb</a>
+  <nav class="site"></nav>
+  <button class="btn ghost sm" id="cartBtn">Cart · <span id="cartCount">0</span></button>
+</header>
+
+<main>
+  <div class="page-head">
+    <h1>Baked fresh this morning</h1>
+    <p>Order before 6pm for same-day delivery across the city.</p>
+  </div>
+
+  <div id="products" class="grid">
+    <p class="muted">Loading the counter…</p>
+  </div>
+</main>
+
+<script type="module">
+import { supabase, money, finalPrice, esc, paintHeader, requireUser }
+  from './app.js'
+
+paintHeader('index.html')
+
+/* ------------------------------------------------------------------- cart */
+
+const cart = new Map()          // product id -> { product, qty }
+const countEl = document.getElementById('cartCount')
+
+const saveCart = () => {
+  try {
+    localStorage.setItem('cart', JSON.stringify(
+      [...cart.values()].map(({ product, qty }) => ({ id: product.id, qty }))))
+  } catch {}
+}
+
+const paintCount = () => {
+  countEl.textContent = [...cart.values()].reduce((n, i) => n + i.qty, 0)
+}
+
+function addToCart (product) {
+  const line = cart.get(product.id)
+  line ? line.qty++ : cart.set(product.id, { product, qty: 1 })
+  paintCount(); saveCart()
+}
+
+function setQty (id, qty) {
+  if (qty <= 0) cart.delete(id)
+  else cart.get(id).qty = qty
+  paintCount(); saveCart(); drawCart()
+}
+
+const cartTotal = () =>
+  [...cart.values()].reduce((s, i) => s + finalPrice(i.product) * i.qty, 0)
+
+/* --------------------------------------------------------------- products */
+
+const grid = document.getElementById('products')
+
+const { data: products, error } = await supabase
+  .from('bakery_products')
+  .select('*')
+  .order('created_at')
+
+if (error) {
+  grid.innerHTML = `<div class="notice err">Could not load products: ${esc(error.message)}</div>`
+} else if (!products.length) {
+  grid.innerHTML = `<div class="empty"><span class="mark">🍞</span>
+    The counter is empty right now. Check back soon.</div>`
+} else {
+  grid.innerHTML = products.map(p => {
+    const off = p.discount_percent > 0
+    return `
+    <article class="card product">
+      ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">` : ''}
+      <div class="body">
+        <h3>${esc(p.name)}</h3>
+        <p class="desc">${esc(p.description)}</p>
+        <div class="price-row">
+          <span class="price">${money(finalPrice(p))}</span>
+          ${off ? `<span class="was">${money(p.price)}</span>
+                   <span class="tag off">${p.discount_percent}% off</span>` : ''}
+        </div>
+        <button class="btn" data-add="${p.id}">Add to cart</button>
+      </div>
+    </article>`
+  }).join('')
+
+  grid.addEventListener('click', e => {
+    const id = e.target.dataset?.add
+    if (id) addToCart(products.find(p => p.id === id))
+  })
+
+  // Restore whatever was in the cart last visit.
+  try {
+    for (const { id, qty } of JSON.parse(localStorage.getItem('cart') || '[]')) {
+      const p = products.find(x => x.id === id)
+      if (p) cart.set(id, { product: p, qty })
+    }
+  } catch {}
+  paintCount()
+}
+
+/* ------------------------------------------------------------- cart panel */
+
+document.getElementById('cartBtn').addEventListener('click', drawCart)
+
+function drawCart () {
+  document.querySelector('.cart-wrap')?.remove()
+  if (!cart.size) {
+    const wrap = panel(`<div class="empty"><span class="mark">🧺</span>
+      Your cart is empty.</div>`)
+    return wrap
+  }
+
+  const lines = [...cart.values()].map(({ product: p, qty }) => `
+    <div class="cart-item">
+      <span class="nm">${esc(p.name)}<br>
+        <span class="muted" style="font-weight:400;font-size:13px">
+          ${money(finalPrice(p))} each</span></span>
+      <span class="qty">
+        <button data-q="${p.id}" data-d="-1">−</button>
+        <b>${qty}</b>
+        <button data-q="${p.id}" data-d="1">+</button>
+      </span>
+    </div>`).join('')
+
+  const wrap = panel(`
+    ${lines}
+    <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
+    <form id="checkout" class="stack">
+      <label class="field"><span>Your name</span>
+        <input name="customer_name" required></label>
+      <label class="field"><span>Phone</span>
+        <input name="phone" required placeholder="03xx-xxxxxxx"></label>
+      <label class="field"><span>Delivery address</span>
+        <textarea name="address" required></textarea></label>
+      <div id="coMsg"></div>
+      <button class="btn" style="width:100%">Place order · ${money(cartTotal())}</button>
+    </form>`)
+
+  wrap.addEventListener('click', e => {
+    const id = e.target.dataset?.q
+    if (id) setQty(id, cart.get(id).qty + Number(e.target.dataset.d))
+  })
+
+  wrap.querySelector('#checkout')?.addEventListener('submit', placeOrder)
+  return wrap
+}
+
+function panel (inner) {
+  const wrap = document.createElement('div')
+  wrap.className = 'cart-wrap'
+  wrap.innerHTML = `<div class="cart">
+    <div style="display:flex;align-items:center;margin-bottom:4px">
+      <h2 style="flex:1">Your cart</h2>
+      <button class="btn ghost sm" id="closeCart">Close</button>
+    </div>${inner}</div>`
+  document.body.appendChild(wrap)
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove() })
+  wrap.querySelector('#closeCart').addEventListener('click', () => wrap.remove())
+  return wrap
+}
+
+/* ------------------------------------------------------------- place order */
+
+async function placeOrder (e) {
+  e.preventDefault()
+  const form = e.target
+  const msg = form.querySelector('#coMsg')
+  const btn = form.querySelector('button')
+
+  const user = await requireUser()
+  if (!user) return                       // auth modal opened instead
+
+  btn.disabled = true
+  msg.innerHTML = ''
+
+  const { data: order, error: oErr } = await supabase
+    .from('bakery_orders')
+    .insert({
+      user_id: user.id,
+      customer_name: form.customer_name.value.trim(),
+      phone: form.phone.value.trim(),
+      address: form.address.value.trim(),
+      total: cartTotal()
+    })
+    .select()
+    .single()
+
+  if (oErr) {
+    btn.disabled = false
+    msg.innerHTML = `<div class="notice err">${esc(oErr.message)}</div>`
+    return
+  }
+
+  const { error: iErr } = await supabase.from('bakery_order_items').insert(
+    [...cart.values()].map(({ product: p, qty }) => ({
+      order_id: order.id,
+      product_id: p.id,
+      product_name: p.name,
+      qty,
+      unit_price: finalPrice(p)
+    })))
+
+  if (iErr) {
+    btn.disabled = false
+    msg.innerHTML = `<div class="notice err">Order saved but items failed:
+      ${esc(iErr.message)}</div>`
+    return
+  }
+
+  cart.clear(); saveCart(); paintCount()
+  document.querySelector('.cart-wrap')?.remove()
+  panel(`<div class="notice ok">Order placed. We'll call you to confirm.</div>
+    <a class="btn" href="orders.html" style="width:100%">See my orders</a>`)
+}
+</script>
+</body>
+</html>

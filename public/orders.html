@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Orders · Sweet Crumb</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site">
+  <a class="brand" href="index.html"><span class="mark">🥐</span> Sweet Crumb</a>
+  <nav class="site"></nav>
+</header>
+
+<main>
+  <div class="page-head">
+    <h1>My orders</h1>
+    <p>Everything you've ordered from us, newest first.</p>
+  </div>
+  <div id="out"><p class="muted">Loading…</p></div>
+</main>
+
+<script type="module">
+import { supabase, money, esc, paintHeader, openAuth } from './app.js'
+
+const { user } = await paintHeader('orders.html')
+const out = document.getElementById('out')
+
+if (!user) {
+  out.innerHTML = `<div class="empty"><span class="mark">🔒</span>
+    Sign in to see your orders.<br><br>
+    <button class="btn" id="go">Sign in</button></div>`
+  document.getElementById('go').addEventListener('click', openAuth)
+} else {
+  // One round trip: orders with their items nested underneath.
+  const { data: orders, error } = await supabase
+    .from('bakery_orders')
+    .select('*, bakery_order_items(*)')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    out.innerHTML = `<div class="notice err">${esc(error.message)}</div>`
+  } else if (!orders.length) {
+    out.innerHTML = `<div class="empty"><span class="mark">🧾</span>
+      No orders yet.<br><br>
+      <a class="btn" href="index.html">Browse the counter</a></div>`
+  } else {
+    out.innerHTML = `<div class="stack">` + orders.map(o => `
+      <section class="card" style="padding:18px 20px">
+        <div class="row" style="align-items:baseline">
+          <b>${new Date(o.created_at).toLocaleString('en-PK',
+               { dateStyle: 'medium', timeStyle: 'short' })}</b>
+          <span class="badge ${esc(o.status)}">${esc(o.status)}</span>
+          <span style="margin-left:auto;font-weight:750">${money(o.total)}</span>
+        </div>
+        <div class="table-wrap" style="margin-top:12px">
+          <table>
+            <tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th></tr>
+            ${o.bakery_order_items.map(i => `
+              <tr>
+                <td>${esc(i.product_name)}</td>
+                <td class="num">${i.qty}</td>
+                <td class="num">${money(i.unit_price * i.qty)}</td>
+              </tr>`).join('')}
+          </table>
+        </div>
+        <p class="muted" style="margin:12px 0 0;font-size:13px">
+          Delivering to ${esc(o.address)} · ${esc(o.phone)}
+        </p>
+      </section>`).join('') + `</div>`
+  }
+}
+</script>
+</body>
+</html>

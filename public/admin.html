@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Sweet Crumb</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site">
+  <a class="brand" href="index.html"><span class="mark">🥐</span> Sweet Crumb</a>
+  <nav class="site"></nav>
+</header>
+
+<main>
+  <div class="page-head">
+    <h1>Admin dashboard</h1>
+    <p>Add products, set prices and discounts, and move orders along.</p>
+  </div>
+  <div id="out"><p class="muted">Checking access…</p></div>
+</main>
+
+<script type="module">
+import { supabase, money, finalPrice, esc, paintHeader, openAuth } from './app.js'
+
+const { user, admin } = await paintHeader('admin.html')
+const out = document.getElementById('out')
+
+/* This gate is convenience, not security. Even if someone edits it away in DevTools,
+   every write below still has to pass bakery_is_admin() inside the database. */
+if (!user) {
+  out.innerHTML = `<div class="empty"><span class="mark">🔒</span>
+    Sign in with an admin account.<br><br>
+    <button class="btn" id="go">Sign in</button></div>`
+  document.getElementById('go').addEventListener('click', openAuth)
+} else if (!admin) {
+  out.innerHTML = `<div class="empty"><span class="mark">⛔</span>
+    <b>${esc(user.email)}</b> is not an admin account.<br>
+    <span class="muted">Ask the owner to add this email to the admin list.</span></div>`
+} else {
+  out.innerHTML = `
+    <section class="card" style="padding:20px 22px;margin-bottom:26px">
+      <h2 style="font-size:18px;margin-bottom:14px">Add a product</h2>
+      <form id="newProduct">
+        <div class="row">
+          <label class="field" style="flex:2;min-width:190px"><span>Name</span>
+            <input name="name" required></label>
+          <label class="field" style="flex:1;min-width:110px"><span>Price (Rs)</span>
+            <input name="price" type="number" min="0" step="1" required></label>
+          <label class="field" style="flex:1;min-width:110px"><span>Discount %</span>
+            <input name="discount_percent" type="number" min="0" max="90" value="0"></label>
+        </div>
+        <label class="field"><span>Description</span>
+          <input name="description" placeholder="One line customers will read"></label>
+        <label class="field"><span>Image URL (optional)</span>
+          <input name="image_url" type="url" placeholder="https://…"></label>
+        <div id="npMsg"></div>
+        <button class="btn">Add product</button>
+      </form>
+    </section>
+
+    <h2 style="font-size:18px;margin-bottom:12px">Products</h2>
+    <div class="card table-wrap" style="margin-bottom:30px"><table id="prodTable">
+      <tr><th>Name</th><th class="num">Price</th><th class="num">Disc %</th>
+          <th class="num">Sells for</th><th>Shown</th><th></th></tr>
+    </table></div>
+
+    <h2 style="font-size:18px;margin-bottom:12px">Orders</h2>
+    <div class="card table-wrap"><table id="orderTable">
+      <tr><th>When</th><th>Customer</th><th>Items</th>
+          <th class="num">Total</th><th>Status</th></tr>
+    </table></div>`
+
+  await loadProducts()
+  await loadOrders()
+
+  /* ------------------------------------------------------------ add product */
+
+  document.getElementById('newProduct').addEventListener('submit', async e => {
+    e.preventDefault()
+    const f = e.target
+    const msg = f.querySelector('#npMsg')
+    const btn = f.querySelector('button')
+    btn.disabled = true
+
+    const { error } = await supabase.from('bakery_products').insert({
+      name: f.name.value.trim(),
+      description: f.description.value.trim(),
+      price: Number(f.price.value),
+      discount_percent: Number(f.discount_percent.value || 0),
+      image_url: f.image_url.value.trim() || null
+    })
+
+    btn.disabled = false
+    if (error) {
+      msg.innerHTML = `<div class="notice err">${esc(error.message)}</div>`
+      return
+    }
+    msg.innerHTML = `<div class="notice ok">Added.</div>`
+    f.reset()
+    f.discount_percent.value = 0
+    await loadProducts()
+    setTimeout(() => { msg.innerHTML = '' }, 2500)
+  })
+}
+
+/* ----------------------------------------------------------------- products */
+
+async function loadProducts () {
+  const table = document.getElementById('prodTable')
+  const { data, error } = await supabase
+    .from('bakery_products').select('*').order('created_at')
+
+  const head = table.rows[0].outerHTML
+  if (error) {
+    table.innerHTML = head + `<tr><td colspan="6" class="notice err">
+      ${esc(error.message)}</td></tr>`
+    return
+  }
+
+  table.innerHTML = head + data.map(p => `
+    <tr data-id="${p.id}">
+      <td>${esc(p.name)}</td>
+      <td class="num"><input data-f="price" type="number" min="0" step="1"
+            value="${p.price}" style="width:92px;text-align:right"></td>
+      <td class="num"><input data-f="discount_percent" type="number" min="0" max="90"
+            value="${p.discount_percent}" style="width:72px;text-align:right"></td>
+      <td class="num"><b>${money(finalPrice(p))}</b></td>
+      <td><input data-f="is_available" type="checkbox" ${p.is_available ? 'checked' : ''}
+            style="width:auto"></td>
+      <td class="right">
+        <button class="btn sm" data-save="${p.id}">Save</button>
+        <button class="btn sm danger" data-del="${p.id}">Delete</button>
+      </td>
+    </tr>`).join('')
+
+  table.onclick = async e => {
+    const save = e.target.dataset?.save
+    const del  = e.target.dataset?.del
+    if (!save && !del) return
+
+    const row = e.target.closest('tr')
+    e.target.disabled = true
+
+    if (del) {
+      if (!confirm('Delete this product? Past orders keep their own copy of the name and price.')) {
+        e.target.disabled = false
+        return
+      }
+      const { error } = await supabase.from('bakery_products').delete().eq('id', del)
+      if (error) { alert(error.message); e.target.disabled = false; return }
+    } else {
+      const get = f => row.querySelector(`[data-f="${f}"]`)
+      const { error } = await supabase.from('bakery_products').update({
+        price: Number(get('price').value),
+        discount_percent: Number(get('discount_percent').value),
+        is_available: get('is_available').checked
+      }).eq('id', save)
+      if (error) { alert(error.message); e.target.disabled = false; return }
+    }
+    await loadProducts()
+  }
+}
+
+/* ------------------------------------------------------------------- orders */
+
+async function loadOrders () {
+  const table = document.getElementById('orderTable')
+  const { data, error } = await supabase
+    .from('bakery_orders')
+    .select('*, bakery_order_items(product_name, qty)')
+    .order('created_at', { ascending: false })
+
+  const head = table.rows[0].outerHTML
+  if (error) {
+    table.innerHTML = head + `<tr><td colspan="5" class="notice err">
+      ${esc(error.message)}</td></tr>`
+    return
+  }
+  if (!data.length) {
+    table.innerHTML = head + `<tr><td colspan="5" class="muted">No orders yet.</td></tr>`
+    return
+  }
+
+  const states = ['pending', 'confirmed', 'delivered', 'cancelled']
+
+  table.innerHTML = head + data.map(o => `
+    <tr>
+      <td>${new Date(o.created_at).toLocaleString('en-PK',
+            { dateStyle: 'short', timeStyle: 'short' })}</td>
+      <td>${esc(o.customer_name)}<br>
+          <span class="muted" style="font-size:13px">${esc(o.phone)}</span><br>
+          <span class="muted" style="font-size:13px">${esc(o.address)}</span></td>
+      <td>${o.bakery_order_items.map(i =>
+            `${esc(i.product_name)} ×${i.qty}`).join('<br>')}</td>
+      <td class="num"><b>${money(o.total)}</b></td>
+      <td>
+        <select data-status="${o.id}" style="width:auto">
+          ${states.map(s =>
+            `<option value="${s}"${s === o.status ? ' selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`).join('')
+
+  table.onchange = async e => {
+    const id = e.target.dataset?.status
+    if (!id) return
+    e.target.disabled = true
+    const { error } = await supabase.from('bakery_orders')
+      .update({ status: e.target.value }).eq('id', id)
+    e.target.disabled = false
+    if (error) { alert(error.message); await loadOrders() }
+  }
+}
+</script>
+</body>
+</html>

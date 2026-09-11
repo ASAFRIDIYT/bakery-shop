@@ -1,0 +1,12 @@
+{
+  "name": "bakery-shop",
+  "compatibility_date": "2026-09-11",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    // Only public/ is served. Pointing this at "." would publish .git and
+    // supabase/ along with the site.
+    "directory": "./public"
+  }
+}
