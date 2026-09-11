@@ -115,7 +115,12 @@ export async function paintHeader (active) {
 
   let html = link('index.html', 'Shop')
   if (user) html += link('orders.html', 'My Orders')
-  if (admin) html += link('admin.html', 'Admin')
+
+  // Deliberately absent from the shop front. A customer could never see this link
+  // anyway -- bakery_is_admin() answers false for them, and the database refuses
+  // every admin action regardless -- but the storefront should read as a shop, not
+  // as a shop with a staff door in the header. Admins reach it from My Orders.
+  if (admin && active !== 'index.html') html += link('admin.html', 'Admin')
 
   html += user
     ? `<button class="btn ghost sm" id="signout">Sign out</button>`
