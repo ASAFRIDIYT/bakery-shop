@@ -47,7 +47,7 @@ if (!user) {
       <a class="btn" href="index.html">Browse the counter</a></div>`
   } else {
     out.innerHTML = `<div class="stack">` + orders.map(o => `
-      <section class="card" style="padding:18px 20px">
+      <section class="card rise" style="padding:18px 20px">
         <div class="row" style="align-items:baseline">
           <b>${new Date(o.created_at).toLocaleString('en-PK',
                { dateStyle: 'medium', timeStyle: 'short' })}</b>

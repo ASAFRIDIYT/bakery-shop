@@ -6,3 +6,5 @@ project_id = "bakery-shop"
 [auth]
 site_url = "https://bakery-shop.asimafridi929.workers.dev"
 additional_redirect_urls = ["https://bakery-shop.asimafridi929.workers.dev/**"]
+enable_leaked_password_protection = true
+minimum_password_length = 8

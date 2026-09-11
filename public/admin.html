@@ -22,13 +22,15 @@
 </main>
 
 <script type="module">
-import { supabase, money, finalPrice, esc, paintHeader, openAuth } from './app.js'
+import { supabase, money, finalPrice, esc, paintHeader, openAuth, uploadProductImage }
+  from './app.js'
 
 const { user, admin } = await paintHeader('admin.html')
 const out = document.getElementById('out')
 
-/* This gate is convenience, not security. Even if someone edits it away in DevTools,
-   every write below still has to pass bakery_is_admin() inside the database. */
+/* This gate is convenience, not security. Even with it edited away in DevTools,
+   every write below still has to pass bakery_is_admin() inside the database, and
+   so does every image upload. */
 if (!user) {
   out.innerHTML = `<div class="empty"><span class="mark">🔒</span>
     Sign in with an admin account.<br><br>
@@ -40,66 +42,155 @@ if (!user) {
     <span class="muted">Ask the owner to add this email to the admin list.</span></div>`
 } else {
   out.innerHTML = `
-    <section class="card" style="padding:20px 22px;margin-bottom:26px">
+    <section class="card rise" style="padding:20px 22px;margin-bottom:26px">
       <h2 style="font-size:18px;margin-bottom:14px">Add a product</h2>
       <form id="newProduct">
         <div class="row">
           <label class="field" style="flex:2;min-width:190px"><span>Name</span>
-            <input name="name" required></label>
+            <input name="name" required maxlength="120"></label>
           <label class="field" style="flex:1;min-width:110px"><span>Price (Rs)</span>
             <input name="price" type="number" min="0" step="1" required></label>
           <label class="field" style="flex:1;min-width:110px"><span>Discount %</span>
             <input name="discount_percent" type="number" min="0" max="90" value="0"></label>
         </div>
         <label class="field"><span>Description</span>
-          <input name="description" placeholder="One line customers will read"></label>
-        <label class="field"><span>Image URL (optional)</span>
-          <input name="image_url" type="url" placeholder="https://…"></label>
-        <div id="npMsg"></div>
+          <input name="description" maxlength="500"
+                 placeholder="One line customers will read"></label>
+
+        <span style="display:block;font-size:13px;font-weight:650;color:var(--muted);
+                     margin-bottom:5px">Picture</span>
+        <div class="tabs" id="imgTabs">
+          <button type="button" data-src="file" class="on">Upload a file</button>
+          <button type="button" data-src="url">Paste a link</button>
+        </div>
+
+        <div id="paneFile">
+          <div class="drop" id="drop">
+            <span class="mark">🖼️</span>
+            Click to choose an image, or drag one here
+            <br><span style="font-size:12px">JPG, PNG, WebP, GIF or AVIF · up to 3 MB</span>
+          </div>
+          <input type="file" id="file" accept="image/*" hidden>
+          <div id="preview"></div>
+        </div>
+
+        <div id="paneUrl" hidden>
+          <input name="image_url" type="url" placeholder="https://…" maxlength="500">
+          <p class="muted" style="font-size:12.5px;margin:6px 0 0">
+            Must start with https://</p>
+        </div>
+
+        <div id="npMsg" style="margin-top:14px"></div>
         <button class="btn">Add product</button>
       </form>
     </section>
 
     <h2 style="font-size:18px;margin-bottom:12px">Products</h2>
-    <div class="card table-wrap" style="margin-bottom:30px"><table id="prodTable">
-      <tr><th>Name</th><th class="num">Price</th><th class="num">Disc %</th>
+    <div class="card table-wrap rise" style="margin-bottom:30px"><table id="prodTable">
+      <tr><th></th><th>Name</th><th class="num">Price</th><th class="num">Disc %</th>
           <th class="num">Sells for</th><th>Shown</th><th></th></tr>
     </table></div>
 
     <h2 style="font-size:18px;margin-bottom:12px">Orders</h2>
-    <div class="card table-wrap"><table id="orderTable">
+    <div class="card table-wrap rise"><table id="orderTable">
       <tr><th>When</th><th>Customer</th><th>Items</th>
           <th class="num">Total</th><th>Status</th></tr>
-    </table></div>`
+    </table></div>
+
+    <input type="file" id="rowFile" accept="image/*" hidden>`
 
   await loadProducts()
   await loadOrders()
+  wireAddForm()
+}
 
-  /* ------------------------------------------------------------ add product */
+/* ------------------------------------------------------------- add product */
 
-  document.getElementById('newProduct').addEventListener('submit', async e => {
+function wireAddForm () {
+  const form   = document.getElementById('newProduct')
+  const tabs   = document.getElementById('imgTabs')
+  const drop   = document.getElementById('drop')
+  const file   = document.getElementById('file')
+  const prev   = document.getElementById('preview')
+  const msg    = document.getElementById('npMsg')
+  const btn    = form.querySelector('button.btn')
+  let mode = 'file'
+  let chosen = null
+
+  tabs.addEventListener('click', e => {
+    const b = e.target.closest('button[data-src]')
+    if (!b) return
+    mode = b.dataset.src
+    tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
+    document.getElementById('paneFile').hidden = mode !== 'file'
+    document.getElementById('paneUrl').hidden  = mode !== 'url'
+  })
+
+  const showPreview = f => {
+    chosen = f
+    const url = URL.createObjectURL(f)
+    prev.innerHTML = `<div class="preview">
+      <img src="${url}" alt="">
+      <div style="flex:1">
+        <b style="font-size:13.5px">${esc(f.name)}</b><br>
+        <span class="muted" style="font-size:12.5px">
+          ${(f.size / 1024).toFixed(0)} KB</span>
+      </div>
+      <button class="btn ghost sm" type="button" id="clearPic">Remove</button>
+    </div>`
+    prev.querySelector('#clearPic').addEventListener('click', () => {
+      chosen = null; file.value = ''; prev.innerHTML = ''
+    })
+  }
+
+  drop.addEventListener('click', () => file.click())
+  file.addEventListener('change', () => file.files[0] && showPreview(file.files[0]))
+
+  ;['dragenter', 'dragover'].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over') }))
+  ;['dragleave', 'drop'].forEach(ev =>
+    drop.addEventListener(ev, () => drop.classList.remove('over')))
+
+  drop.addEventListener('drop', e => {
     e.preventDefault()
-    const f = e.target
-    const msg = f.querySelector('#npMsg')
-    const btn = f.querySelector('button')
-    btn.disabled = true
+    const f = e.dataTransfer.files[0]
+    if (f) showPreview(f)
+  })
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault()
+    msg.innerHTML = ''
+    btn.classList.add('busy')
+
+    let image_url = null
+    try {
+      if (mode === 'file' && chosen) image_url = await uploadProductImage(chosen)
+      else if (mode === 'url') image_url = form.image_url.value.trim() || null
+    } catch (err) {
+      btn.classList.remove('busy')
+      msg.innerHTML = `<div class="notice err">Upload failed: ${esc(err.message)}</div>`
+      return
+    }
 
     const { error } = await supabase.from('bakery_products').insert({
-      name: f.name.value.trim(),
-      description: f.description.value.trim(),
-      price: Number(f.price.value),
-      discount_percent: Number(f.discount_percent.value || 0),
-      image_url: f.image_url.value.trim() || null
+      name: form.name.value.trim(),
+      description: form.description.value.trim(),
+      price: Number(form.price.value),
+      discount_percent: Number(form.discount_percent.value || 0),
+      image_url
     })
 
-    btn.disabled = false
+    btn.classList.remove('busy')
     if (error) {
       msg.innerHTML = `<div class="notice err">${esc(error.message)}</div>`
       return
     }
+
     msg.innerHTML = `<div class="notice ok">Added.</div>`
-    f.reset()
-    f.discount_percent.value = 0
+    form.reset()
+    form.discount_percent.value = 0
+    chosen = null
+    prev.innerHTML = ''
     await loadProducts()
     setTimeout(() => { msg.innerHTML = '' }, 2500)
   })
@@ -114,42 +205,50 @@ async function loadProducts () {
 
   const head = table.rows[0].outerHTML
   if (error) {
-    table.innerHTML = head + `<tr><td colspan="6" class="notice err">
+    table.innerHTML = head + `<tr><td colspan="7" class="notice err">
       ${esc(error.message)}</td></tr>`
     return
   }
 
   table.innerHTML = head + data.map(p => `
     <tr data-id="${p.id}">
+      <td>${p.image_url
+            ? `<img class="thumb" src="${esc(p.image_url)}" alt="">`
+            : `<div class="thumb"></div>`}</td>
       <td>${esc(p.name)}</td>
       <td class="num"><input data-f="price" type="number" min="0" step="1"
             value="${p.price}" style="width:92px;text-align:right"></td>
       <td class="num"><input data-f="discount_percent" type="number" min="0" max="90"
             value="${p.discount_percent}" style="width:72px;text-align:right"></td>
       <td class="num"><b>${money(finalPrice(p))}</b></td>
-      <td><input data-f="is_available" type="checkbox" ${p.is_available ? 'checked' : ''}
-            style="width:auto"></td>
-      <td class="right">
+      <td><input data-f="is_available" type="checkbox" ${p.is_available ? 'checked' : ''}></td>
+      <td class="right" style="white-space:nowrap">
+        <button class="btn ghost sm" data-pic="${p.id}">Picture</button>
         <button class="btn sm" data-save="${p.id}">Save</button>
         <button class="btn sm danger" data-del="${p.id}">Delete</button>
       </td>
     </tr>`).join('')
 
   table.onclick = async e => {
-    const save = e.target.dataset?.save
-    const del  = e.target.dataset?.del
+    const btn  = e.target.closest('button')
+    if (!btn) return
+    const save = btn.dataset.save
+    const del  = btn.dataset.del
+    const pic  = btn.dataset.pic
+
+    if (pic) return changePicture(pic)
     if (!save && !del) return
 
-    const row = e.target.closest('tr')
-    e.target.disabled = true
+    const row = btn.closest('tr')
+    btn.classList.add('busy')
 
     if (del) {
       if (!confirm('Delete this product? Past orders keep their own copy of the name and price.')) {
-        e.target.disabled = false
+        btn.classList.remove('busy')
         return
       }
       const { error } = await supabase.from('bakery_products').delete().eq('id', del)
-      if (error) { alert(error.message); e.target.disabled = false; return }
+      if (error) { alert(error.message); btn.classList.remove('busy'); return }
     } else {
       const get = f => row.querySelector(`[data-f="${f}"]`)
       const { error } = await supabase.from('bakery_products').update({
@@ -157,10 +256,32 @@ async function loadProducts () {
         discount_percent: Number(get('discount_percent').value),
         is_available: get('is_available').checked
       }).eq('id', save)
-      if (error) { alert(error.message); e.target.disabled = false; return }
+      if (error) { alert(error.message); btn.classList.remove('busy'); return }
     }
     await loadProducts()
   }
+}
+
+// Replace one product's picture with an uploaded file.
+function changePicture (id) {
+  const input = document.getElementById('rowFile')
+  input.value = ''
+  input.onchange = async () => {
+    const f = input.files[0]
+    if (!f) return
+    const cell = document.querySelector(`tr[data-id="${id}"] td:first-child`)
+    if (cell) cell.innerHTML = `<div class="thumb skel" style="height:40px"></div>`
+    try {
+      const url = await uploadProductImage(f)
+      const { error } = await supabase.from('bakery_products')
+        .update({ image_url: url }).eq('id', id)
+      if (error) throw error
+    } catch (err) {
+      alert('Could not update the picture: ' + err.message)
+    }
+    await loadProducts()
+  }
+  input.click()
 }
 
 /* ------------------------------------------------------------------- orders */

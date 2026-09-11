@@ -21,7 +21,8 @@
   </div>
 
   <div id="products" class="grid">
-    <p class="muted">Loading the counter…</p>
+    <div class="skel"></div><div class="skel"></div>
+    <div class="skel"></div><div class="skel"></div>
   </div>
 </main>
 
@@ -44,7 +45,14 @@ const saveCart = () => {
 }
 
 const paintCount = () => {
-  countEl.textContent = [...cart.values()].reduce((n, i) => n + i.qty, 0)
+  const n = [...cart.values()].reduce((t, i) => t + i.qty, 0)
+  const changed = countEl.textContent !== String(n)
+  countEl.textContent = n
+  if (changed) {                       // a small bump so the count is noticed
+    countEl.classList.remove('bumped')
+    void countEl.offsetWidth           // restart the animation
+    countEl.classList.add('bumped')
+  }
 }
 
 function addToCart (product) {
@@ -80,15 +88,19 @@ if (error) {
   grid.innerHTML = products.map(p => {
     const off = p.discount_percent > 0
     return `
-    <article class="card product">
-      ${p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">` : ''}
+    <article class="card product rise">
+      <div class="shot">
+        ${p.image_url
+          ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`
+          : `<img alt="" style="aspect-ratio:4/3">`}
+        ${off ? `<span class="tag off">${p.discount_percent}% off</span>` : ''}
+      </div>
       <div class="body">
         <h3>${esc(p.name)}</h3>
         <p class="desc">${esc(p.description)}</p>
         <div class="price-row">
           <span class="price">${money(finalPrice(p))}</span>
-          ${off ? `<span class="was">${money(p.price)}</span>
-                   <span class="tag off">${p.discount_percent}% off</span>` : ''}
+          ${off ? `<span class="was">${money(p.price)}</span>` : ''}
         </div>
         <button class="btn" data-add="${p.id}">Add to cart</button>
       </div>
@@ -182,7 +194,7 @@ async function placeOrder (e) {
   const user = await requireUser()
   if (!user) return                       // auth modal opened instead
 
-  btn.disabled = true
+  btn.classList.add('busy')
   msg.innerHTML = ''
 
   // Only ids and quantities go over the wire. The database looks up every price
@@ -199,7 +211,7 @@ async function placeOrder (e) {
   })
 
   if (error) {
-    btn.disabled = false
+    btn.classList.remove('busy')
     msg.innerHTML = `<div class="notice err">${esc(error.message)}</div>`
     return
   }

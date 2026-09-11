@@ -21,6 +21,70 @@ export const finalPrice = p =>
 export const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
+/* ------------------------------------------------------------------- theme */
+
+// Three states: an explicit "light"/"dark" stamped on <html>, or no attribute at
+// all, which lets the visitor's OS setting decide. Stored per browser only.
+const THEMES = ['system', 'light', 'dark']
+const THEME_ICON = { system: '🌗', light: '☀️', dark: '🌙' }
+
+export function readTheme () {
+  try { return THEMES.includes(localStorage.theme) ? localStorage.theme : 'system' }
+  catch { return 'system' }
+}
+
+export function applyTheme (t) {
+  if (t === 'system') document.documentElement.removeAttribute('data-theme')
+  else document.documentElement.setAttribute('data-theme', t)
+  try { localStorage.theme = t } catch {}
+}
+
+// Runs before first paint (app.js is imported in <head>'s module graph) so the
+// page never flashes the wrong theme.
+applyTheme(readTheme())
+
+function themeButton () {
+  const b = document.createElement('button')
+  b.className = 'theme-btn'
+  b.type = 'button'
+  const sync = () => {
+    const t = readTheme()
+    b.textContent = THEME_ICON[t]
+    b.title = `Theme: ${t} — click to change`
+    b.setAttribute('aria-label', b.title)
+  }
+  sync()
+  b.addEventListener('click', () => {
+    applyTheme(THEMES[(THEMES.indexOf(readTheme()) + 1) % THEMES.length])
+    sync()
+  })
+  return b
+}
+
+/* ------------------------------------------------------------------ upload */
+
+export const PRODUCT_BUCKET = 'bakery-products'
+
+// Uploads one image and returns its public URL. The bucket rejects anything that
+// is not an image or is over 3 MB, and storage policies reject the write outright
+// unless the caller is an admin -- these checks are the convenience copy.
+export async function uploadProductImage (file) {
+  if (!file) throw new Error('No file chosen')
+  if (!file.type.startsWith('image/')) throw new Error('That file is not an image')
+  if (file.size > 3 * 1024 * 1024) throw new Error('Image must be under 3 MB')
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const path = `${crypto.randomUUID()}.${ext || 'jpg'}`
+
+  const { error } = await supabase.storage
+    .from(PRODUCT_BUCKET)
+    .upload(path, file, { cacheControl: '31536000', upsert: false })
+
+  if (error) throw error
+
+  return supabase.storage.from(PRODUCT_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 /* ----------------------------------------------------------------- session */
 
 export async function currentUser () {
@@ -58,6 +122,7 @@ export async function paintHeader (active) {
     : `<button class="btn sm" id="signin">Sign in</button>`
 
   nav.innerHTML = html
+  nav.appendChild(themeButton())
 
   nav.querySelector('#signout')?.addEventListener('click', async () => {
     await supabase.auth.signOut()
