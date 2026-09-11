@@ -185,37 +185,22 @@ async function placeOrder (e) {
   btn.disabled = true
   msg.innerHTML = ''
 
-  const { data: order, error: oErr } = await supabase
-    .from('bakery_orders')
-    .insert({
-      user_id: user.id,
-      customer_name: form.customer_name.value.trim(),
-      phone: form.phone.value.trim(),
-      address: form.address.value.trim(),
-      total: cartTotal()
-    })
-    .select()
-    .single()
+  // Only ids and quantities go over the wire. The database looks up every price
+  // itself, writes the order and its items in one transaction, and notifies the
+  // shop -- so a tampered request cannot invent a cheaper cake.
+  const { error } = await supabase.rpc('bakery_place_order', {
+    p_customer_name: form.customer_name.value.trim(),
+    p_phone: form.phone.value.trim(),
+    p_address: form.address.value.trim(),
+    p_items: [...cart.values()].map(({ product, qty }) => ({
+      product_id: product.id,
+      qty
+    }))
+  })
 
-  if (oErr) {
+  if (error) {
     btn.disabled = false
-    msg.innerHTML = `<div class="notice err">${esc(oErr.message)}</div>`
-    return
-  }
-
-  const { error: iErr } = await supabase.from('bakery_order_items').insert(
-    [...cart.values()].map(({ product: p, qty }) => ({
-      order_id: order.id,
-      product_id: p.id,
-      product_name: p.name,
-      qty,
-      unit_price: finalPrice(p)
-    })))
-
-  if (iErr) {
-    btn.disabled = false
-    msg.innerHTML = `<div class="notice err">Order saved but items failed:
-      ${esc(iErr.message)}</div>`
+    msg.innerHTML = `<div class="notice err">${esc(error.message)}</div>`
     return
   }
 
